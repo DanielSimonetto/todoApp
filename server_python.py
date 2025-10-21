@@ -115,4 +115,5 @@ def import_todos():
     })
 
 if __name__ == '__main__':
-    app.run(port=3001, debug=True)
+
+    app.run(port=10000, debug=True)
