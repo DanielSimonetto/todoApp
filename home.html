@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Todo (Chill) - Home</title>
+  <style>
+    :root{--bg:#0f1724;--muted:#94a3b8;--accent:#60a5fa}
+    *{box-sizing:border-box}
+    body{font-family:Segoe UI,Helvetica,Arial,sans-serif;background:#071028;color:#e6eef8;margin:0;padding:28px;display:flex;justify-content:center}
+    .wrap{width:100%;max-width:760px}
+    .card{background:rgba(255,255,255,0.03);padding:18px;border-radius:10px}
+    form{display:flex;gap:8px}
+    input[type=text]{flex:1;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit}
+    button{padding:10px 12px;border-radius:8px;border:none;background:var(--accent);color:#04263b;cursor:pointer}
+    button.secondary{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--muted)}
+    .list{margin-top:14px;display:flex;flex-direction:column;gap:8px}
+    .item{display:flex;align-items:center;gap:12px;padding:10px;border-radius:8px;background:rgba(255,255,255,0.01)}
+    .item .text{flex:1}
+    .item.done .text{opacity:0.6;text-decoration:line-through;color:var(--muted)}
+    .meta{margin-top:10px;color:var(--muted);font-size:13px}
+    .controls{display:flex;gap:8px;align-items:center}
+    .search{padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.03);background:transparent;color:inherit}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <h2 style="margin:0">Todo (Chill)</h2>
+      <div class="controls">
+        <input id="search" class="search" placeholder="Cerca..." aria-label="Cerca" />
+        <button id="clearAll" class="secondary">Cancella tutte</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <form id="todoForm">
+        <input id="todoInput" type="text" placeholder="Aggiungi qualcosa da fare..." autocomplete="off" />
+        <button type="submit">Aggiungi</button>
+        <button type="button" id="exportBtn" class="secondary">Export</button>
+        <button type="button" id="importBtn" class="secondary">Import</button>
+      </form>
+
+      <div id="list" class="list" aria-live="polite"></div>
+
+      <div class="meta"><span id="count">0 elementi</span> · <span id="completed">0 completati</span></div>
+
+      <p style="margin-top:12px;color:var(--muted);font-size:13px">I dati vengono salvati in <code>db.json</code> dal server locale (vedi README per avviare).</p>
+    </div>
+  </div>
+
+  <script>
+    // Minimal client that calls local API at /api/
+    const apiBase = '/api/todos'
+
+    function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,8)}
+
+    const listEl = document.getElementById('list')
+    const form = document.getElementById('todoForm')
+    const input = document.getElementById('todoInput')
+    const countEl = document.getElementById('count')
+    const completedEl = document.getElementById('completed')
+    const search = document.getElementById('search')
+    const clearAll = document.getElementById('clearAll')
+    const exportBtn = document.getElementById('exportBtn')
+    const importBtn = document.getElementById('importBtn')
+
+    let todos = []
+
+    async function fetchTodos(){
+      try{ const r = await fetch(apiBase); if(!r.ok) throw new Error('Errore server'); todos = await r.json(); render(); }catch(e){ console.error(e); todos = []; render(); }
+    }
+
+    function render(){
+      listEl.innerHTML = '';
+      const q = search.value.trim().toLowerCase();
+      const filtered = todos.filter(t=> !q || t.text.toLowerCase().includes(q));
+      filtered.forEach(t=>{
+        const el = document.createElement('div'); el.className='item'+(t.done?' done':'')
+        const cb = document.createElement('input'); cb.type='checkbox'; cb.checked = !!t.done; cb.addEventListener('change', ()=> toggle(t.id))
+        const txt = document.createElement('div'); txt.className='text'; txt.textContent = t.text
+        const edit = document.createElement('button'); edit.textContent='Modifica'; edit.className='secondary'; edit.addEventListener('click', ()=> startEdit(t.id))
+        const del = document.createElement('button'); del.textContent='Elimina'; del.className='secondary'; del.addEventListener('click', ()=> delTodo(t.id))
+        el.append(cb, txt, edit, del); listEl.appendChild(el)
+      })
+      countEl.textContent = todos.length + ' elementi'
+      completedEl.textContent = todos.filter(t=>t.done).length + ' completati'
+    }
+
+    async function add(text){
+      if(!text || !text.trim()) return;
+      try{
+        const r = await fetch(apiBase, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({text:text.trim()})})
+        const created = await r.json(); todos.unshift(created); render(); input.value = ''
+      }catch(e){console.error(e); alert('Errore salvataggio')}
+    }
+
+    async function delTodo(id){ try{ await fetch(apiBase+'/'+encodeURIComponent(id), {method:'DELETE'}); todos = todos.filter(t=>t.id!==id); render() }catch(e){console.error(e)} }
+
+    async function toggle(id){ try{ const t = todos.find(x=>x.id===id); const r = await fetch(apiBase+'/'+encodeURIComponent(id), {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({done: !t.done})}); const updated = await r.json(); todos = todos.map(x=> x.id===id?updated:x); render() }catch(e){console.error(e)} }
+
+    let editing = null
+    function startEdit(id){ const t = todos.find(x=>x.id===id); if(!t) return; editing = id; input.value = t.text; input.focus(); }
+
+    form.addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      const v = input.value
+      if(editing){
+        try{ const r = await fetch(apiBase+'/'+encodeURIComponent(editing), {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({text: v.trim()})}); const updated = await r.json(); todos = todos.map(x=> x.id===editing?updated:x); editing = null; input.value=''; render(); }catch(e){console.error(e)}
+      } else {
+        await add(v)
+      }
+    })
+
+    search.addEventListener('input', ()=> render())
+
+    clearAll.addEventListener('click', async ()=>{ if(!confirm('Vuoi cancellare tutte le todo?')) return; try{ await fetch(apiBase, {method:'DELETE'}); todos = []; render() }catch(e){console.error(e)} })
+
+    exportBtn.addEventListener('click', ()=>{ const data = JSON.stringify(todos, null, 2); const blob = new Blob([data], {type:'application/json'}); const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='todo_export.json'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); })
+
+    importBtn.addEventListener('click', ()=>{
+      const inp = document.createElement('input'); inp.type='file'; inp.accept='application/json'; inp.addEventListener('change', async ()=>{
+        const f = inp.files[0]; if(!f) return; const txt = await f.text(); try{ const parsed = JSON.parse(txt); if(!Array.isArray(parsed)) throw new Error('Formato non valido'); await fetch('/api/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(parsed)}); await fetchTodos(); }catch(e){alert('Import fallita: '+e.message)}
+      }); inp.click();
+    })
+
+    // inizializza
+    fetchTodos()
+  </script>
+</body>
+</html>

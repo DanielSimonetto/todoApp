@@ -1,0 +1,13 @@
+{
+  "name": "todo-chill",
+  "version": "1.0.0",
+  "description": "Semplice server per salvare todo in db.json",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "body-parser": "^1.20.3",
+    "express": "^4.21.2"
+  }
+}
